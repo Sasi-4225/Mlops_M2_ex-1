@@ -1,52 +1,43 @@
-name: Student Result ML CI
+name: Student Result ML CI-CD
 
 on:
   push:
-    branches:
-      - main
+    branches: [main, practicals-5-to-10]
   pull_request:
-    branches:
-      - main
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  train-and-test:
+  train-test-deliver:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
-
+        uses: actions/checkout@v4
       - name: Set up Python
-        uses: actions/setup-python@v7
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
-      - name: Upgrade pip
-        run: python -m pip install --upgrade pip
-
-      - name: Install ML dependencies
-        run: pip install -r requirements.txt
-
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
       - name: Train student result model
         run: python train_model.py
-
       - name: Check ML quality gate
         run: python quality_gate.py
-
-      - name: Run automated ML tests
+      - name: Run ML and API tests
         run: python -m unittest discover -v
-
-      - name: Upload validated ML artifacts
-        uses: actions/upload-artifact@v7
+      - name: Prepare release candidate
+        run: |
+          mkdir -p release_candidate
+          cp app.py train_model.py quality_gate.py result_logic.py requirements.txt release_candidate/
+          cp student_result_model.pkl metrics.json student_results.csv release_candidate/
+          printf 'Run: pip install -r requirements.txt\nStart: python app.py\nHealth: GET /health\nPrediction: POST /predict\n' > release_candidate/DEPLOYMENT.txt
+      - name: Upload validated release candidate
+        uses: actions/upload-artifact@v4
         with:
-          name: student-result-ml-artifacts
-          path: |
-            student_result_model.pkl
-            metrics.json
-            student_results.csv
+          name: student-result-ml-release
+          path: release_candidate/
           if-no-files-found: error
           retention-days: 7

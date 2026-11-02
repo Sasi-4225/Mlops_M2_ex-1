@@ -1,0 +1,20 @@
+groups:
+  - name: student-result-api-alerts
+    rules:
+      - alert: StudentResultAPIUnavailable
+        expr: up{job="student-result-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Student Result API is unavailable
+          description: Prometheus cannot scrape the Student Result API for at least one minute.
+
+      - alert: StudentResultAPIHighClientErrors
+        expr: sum(rate(student_result_http_requests_total{status=~"4.."}[5m])) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: Student Result API has repeated client errors
+          description: The API is returning more than 0.1 client errors per second over five minutes.

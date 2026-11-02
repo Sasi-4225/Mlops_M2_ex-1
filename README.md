@@ -1,29 +1,25 @@
 # Student Result Prediction — MLOps Practicals 1–12
 
-This repository demonstrates an end-to-end educational MLOps workflow for a Student Result Prediction model. The API framework is **FastAPI** throughout, using port **8000**.
+This repository demonstrates an educational end-to-end MLOps workflow for a Student Result Prediction model. The API uses **FastAPI** on port **8000**.
 
 ## Practical roadmap
 
 | Practical | Implementation |
 |---|---|
-| 1 | Basic Python CI and automated unit tests |
-| 2 | Automated model training and ML pipeline tests |
-| 3 | Model-quality gate using a minimum accuracy threshold |
-| 4 | Save and upload the trained model, metrics, and dataset as workflow artifacts |
-| 5 | Continuous Delivery of a validated release candidate |
+| 1–5 | Python CI, model training, quality gate, artifacts, release candidate |
 | 6 | Dockerize the FastAPI application |
 | 7 | GitHub Actions builds and tests the Docker container |
-| 8 | Publish and pull the container image through GitHub Container Registry (GHCR) |
+| 8 | Publish and pull the image through GitHub Container Registry (GHCR) |
 | 9 | Automate Docker build, test, tagging, and GHCR publishing |
 | 10 | Deploy the GHCR image to Render |
-| 11 | Add structured application logs, request IDs, and request-duration logs |
-| 12 | Export Prometheus metrics and visualize them with Grafana |
+| 11 | Structured application logs, request IDs, and request-duration logs |
+| 12 | Prometheus metrics, Grafana dashboard, and alert rules |
 
 ## Architecture
 
-`train_model.py` creates the educational dataset, trains the model, and writes `student_result_model.pkl` and `metrics.json`. `quality_gate.py` checks the configured minimum accuracy. GitHub Actions runs the tests and packages validated artifacts. Docker packages the FastAPI service and model. The publishing workflow pushes tested images to GHCR. Render can run the published image. Prometheus scrapes the API metrics and Grafana visualizes them.
+GitHub Actions trains and validates the model, runs tests, builds the Docker image, starts it, and verifies health, prediction, and metrics endpoints. On a successful push, the workflow publishes the tested image to GHCR. Render can run that image. The local Docker Compose monitoring stack runs the API, Prometheus, and Grafana together.
 
-## Local setup
+## Run locally
 
 Requires Python 3.11+.
 
@@ -37,13 +33,13 @@ uvicorn app:app --host 0.0.0.0 --port 8000
 ```
 
 API endpoints:
-- Root: `GET http://localhost:8000/`
-- Health: `GET http://localhost:8000/health`
+- Root: `http://localhost:8000/`
+- Health: `http://localhost:8000/health`
+- Swagger: `http://localhost:8000/docs`
+- Metrics: `http://localhost:8000/metrics`
 - Prediction: `POST http://localhost:8000/predict`
-- Swagger documentation: `http://localhost:8000/docs`
-- Prometheus metrics: `GET http://localhost:8000/metrics`
 
-Example prediction request:
+Example prediction JSON:
 
 ```json
 {
@@ -54,55 +50,64 @@ Example prediction request:
 }
 ```
 
-The four inputs must be numeric values between 0 and 100. FastAPI returns HTTP 422 for invalid or missing input fields.
+All four values must be between 0 and 100. Invalid input returns HTTP 422.
 
-## Docker — Practicals 6 and 7
+## Practicals 6–9: Docker and GHCR
 
 ```bash
 docker build -t student-result-prediction:local .
 docker run --rm -p 8000:8000 student-result-prediction:local
 ```
 
-The image trains and validates its bundled model during the Docker build. Test `http://localhost:8000/health` and send the example JSON to `/predict`.
+The Docker build trains and quality-checks the model artifact. The GitHub Actions workflow builds the image, starts a container, and tests health, prediction, and Prometheus metrics before publishing `latest` and commit-specific tags to GHCR.
 
-## GHCR — Practicals 8 and 9
-
-The workflow `.github/workflows/docker-publish.yml` builds the image, runs health and prediction checks, checks the metrics endpoint, and publishes `latest` and commit-specific tags to GHCR after successful checks.
-
-Image name:
+Image:
 `ghcr.io/sasi-4225/student-result-prediction:latest`
 
-For manual GHCR publishing (Practical 8), authenticate with a GitHub token that has package write permission, then tag and push the locally tested image. Never commit tokens to the repository. For automated publishing (Practical 9), GitHub Actions uses the repository's `GITHUB_TOKEN`; the workflow grants `packages: write`.
+## Practical 10: Render deployment
 
-## Render — Practical 10
+The `render.yaml` blueprint references the GHCR image and configures port 8000 with `/health` as the health-check path. Create/deploy the service in your Render account. If the GHCR package is private, configure a registry credential with read-only package access.
 
-Create a Render **Web Service** using the existing GHCR image:
-`ghcr.io/sasi-4225/student-result-prediction:latest`
+After deployment, verify the actual service URL:
+- `/`
+- `/health`
+- `/docs`
+- `/predict`
 
-Set `PORT=8000` and health-check path `/health`. If the GHCR package is private, configure a registry credential with read-only package access. After a new image is published, redeploy the image-backed service as required by Render. Verify `/`, `/health`, `/docs`, and `/predict` using the actual deployed URL. Do not record a deployment URL until the service has been deployed and tested.
+Do not report a public deployment as complete until these endpoints work on the actual Render URL.
 
-## Logging — Practical 11
+## Practical 11: Application logging
 
-The FastAPI middleware logs request ID, HTTP method, path, status code, and duration. Prediction and model-loading events are logged. Invalid request details and student inputs are not written to logs. View container logs with:
-
-```bash
-docker logs <container-name>
-```
-
-## Prometheus and Grafana — Practical 12
-
-Start the local monitoring stack:
+The API logs request ID, HTTP method, path, status code, and duration. Prediction/model-loading events and exceptions are logged without writing student input values. Inspect logs with:
 
 ```bash
-docker compose -f docker-compose.monitoring.yml up --build
+docker logs student-result-api
 ```
 
-- FastAPI: `http://localhost:8000`
+## Practical 12: Prometheus and Grafana
+
+Start the complete local stack:
+
+```bash
+docker compose -f docker-compose.monitoring.yml up --build -d
+docker compose -f docker-compose.monitoring.yml ps
+```
+
+Open:
+- FastAPI + Swagger: `http://localhost:8000/docs`
 - Prometheus: `http://localhost:9090`
-- Grafana: `http://localhost:3000` (default local admin credentials: admin / admin; change them for any shared environment)
+- Grafana: `http://localhost:3000` (local demo login: admin / admin)
 
-Prometheus scrapes `api:8000/metrics`. A provisioned Grafana dashboard displays request volume and request latency. This local Compose monitoring stack is for demonstration; the Prometheus/Grafana containers are not deployed by the Render API service.
+Grafana provisions the Prometheus data source and the Student Result API dashboard automatically. Prometheus scrapes `api:8000/metrics` every five seconds and loads alert rules from `monitoring/prometheus/alerts.yml`.
+
+Generate traffic by calling `/health` and `/predict`, then view request rate, p95 latency, and status-code panels in Grafana. The alert rules cover API scrape failure and repeated client errors.
+
+Stop the stack:
+
+```bash
+docker compose -f docker-compose.monitoring.yml down
+```
 
 ## Important limitation
 
-The dataset is generated synthetically by `train_model.py`. This is an academic demonstration of an MLOps pipeline, not a validated real-world student assessment system. Do not use its predictions for consequential academic decisions.
+The model training data is generated synthetically by `train_model.py`. This is an academic MLOps demonstration, not a validated real-world student assessment system. Do not use its predictions for consequential academic decisions.

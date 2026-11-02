@@ -2,7 +2,7 @@ name: Student Result ML CI-CD
 
 on:
   push:
-    branches: [main, practicals-5-to-10]
+    branches: [main, fastapi-mlops-12-practicals]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -19,7 +19,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
       - name: Install dependencies
         run: python -m pip install --upgrade pip && pip install -r requirements.txt
       - name: Train student result model
@@ -33,7 +33,7 @@ jobs:
           mkdir -p release_candidate
           cp app.py train_model.py quality_gate.py result_logic.py requirements.txt release_candidate/
           cp student_result_model.pkl metrics.json student_results.csv release_candidate/
-          printf 'Run: pip install -r requirements.txt\nStart: python app.py\nHealth: GET /health\nPrediction: POST /predict\n' > release_candidate/DEPLOYMENT.txt
+          printf 'Install: pip install -r requirements.txt\nStart: uvicorn app:app --host 0.0.0.0 --port 8000\nHealth: GET /health\nPrediction: POST /predict\nMetrics: GET /metrics\n' > release_candidate/DEPLOYMENT.txt
       - name: Upload validated release candidate
         uses: actions/upload-artifact@v4
         with:

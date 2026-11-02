@@ -2,7 +2,7 @@ name: Build, Test and Publish Student Result Prediction
 
 on:
   push:
-    branches: [main]
+    branches: [main, fastapi-mlops-12-practicals]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -25,14 +25,24 @@ jobs:
         run: |
           IMAGE_ID="${REGISTRY}/${GITHUB_REPOSITORY_OWNER}/${IMAGE_NAME}"
           echo "IMAGE_ID=$(echo "$IMAGE_ID" | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: python -m pip install --upgrade pip && pip install -r requirements.txt
+      - name: Train model and enforce quality gate
+        run: python train_model.py && python quality_gate.py
+      - name: Run unit tests
+        run: python -m unittest discover -v
       - name: Build Docker image
         run: docker build -t student-result-prediction:ci .
       - name: Start test container
-        run: docker run -d --name student-result-ci -p 5000:5000 student-result-prediction:ci
+        run: docker run -d --name student-result-ci -p 8000:8000 student-result-prediction:ci
       - name: Test health endpoint
         run: |
           for attempt in {1..20}; do
-            if curl --fail --silent http://localhost:5000/health; then
+            if curl --fail --silent http://localhost:8000/health; then
               echo 'Health check passed.'
               exit 0
             fi
@@ -44,9 +54,11 @@ jobs:
           exit 1
       - name: Test prediction endpoint
         run: |
-          response=$(curl --fail --silent --show-error -X POST http://localhost:5000/predict -H 'Content-Type: application/json' --data '{"attendance":90,"internal_marks":85,"assignment_marks":88,"previous_score":80}')
+          response=$(curl --fail --silent --show-error -X POST http://localhost:8000/predict -H 'Content-Type: application/json' --data '{"attendance":90,"internal_marks":85,"assignment_marks":88,"previous_score":80}')
           echo "Prediction response: $response"
           echo "$response" | grep -q '"prediction":"PASS"'
+      - name: Test Prometheus metrics endpoint
+        run: curl --fail --silent http://localhost:8000/metrics | grep -q 'student_result_http_requests_total'
       - name: Show container logs
         if: always()
         run: docker logs student-result-ci || true

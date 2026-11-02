@@ -9,9 +9,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app.py train_model.py quality_gate.py result_logic.py ./
 COPY test_app.py test_ml_pipeline.py test_result_logic.py ./
 
-# Generate the model inside the image so the container is self-contained.
+# Build a self-contained image with a trained and quality-checked model.
 RUN python train_model.py && python quality_gate.py
 
-EXPOSE 5000
-ENV PORT=5000
-CMD ["python", "app.py"]
+EXPOSE 8000
+ENV PORT=8000
+CMD ["sh", "-c", "uvicorn app:app --host 0.0.0.0 --port ${PORT:-8000}"]
